@@ -4,13 +4,18 @@ An [Agent Skill](https://agentskills.io/specification) that migrates OpenAI Pyth
 
 The skill converts SDK calls (`openai` → `boto3` Bedrock Runtime `converse`) and rewrites prompts to follow Nova 2 Lite formatting and constraints. This is not a one-line model swap — authentication, message structure, parameter nesting, and error handling all change. Every migration delivers two things: **working migrated code** and an **explanation of every change**, including any features that can't be ported 1:1.
 
-The skill supports **GPT-4o, GPT-4.1, GPT-5.x**, and legacy GPT-4 / GPT-3.5 as source models, across three API styles:
+The skill supports two source situations:
 
-| Source API style | Detected from |
+1. **OpenAI API** (`api.openai.com`) — GPT-4o, GPT-4.1, GPT-5.x, and legacy GPT-4 / GPT-3.5, across the Chat Completions, Responses, and Assistants API styles.
+2. **OpenAI on Amazon Bedrock** — OpenAI models already hosted on Bedrock (GPT-5.5 / GPT-5.4 via the Responses API, and gpt-oss-120b / 20b via Converse / Responses / Chat Completions), common when swapping a model in a multi-model Bedrock bake-off. Auth/Region/billing are already AWS-native, so this path is usually lower-effort.
+
+| Source | Detected from |
 |---|---|
-| Chat Completions API | `client.chat.completions.create(...)` |
-| Responses API | `client.responses.create(...)` — `instructions=` + `input=` |
-| Assistants API | `client.beta.assistants.create(...)` / `client.beta.threads.*` |
+| OpenAI API — Chat Completions | `client.chat.completions.create(...)` |
+| OpenAI API — Responses | `client.responses.create(...)` |
+| OpenAI API — Assistants | `client.beta.assistants.create(...)` / `client.beta.threads.*` |
+| OpenAI on Bedrock — Responses | `openai`/`BedrockOpenAI` client on a `bedrock-mantle` base URL, `openai.gpt-5.5` / `openai.gpt-5.4` |
+| OpenAI on Bedrock — Converse/other | `boto3` `converse`/`invoke_model` with an `openai.gpt-oss-*` model ID |
 
 **Target:** `us.amazon.nova-2-lite-v1:0`
 
@@ -23,7 +28,8 @@ openai-to-nova-migration/
 └── references/
     ├── feature-mapping.md                # Complete OpenAI → Nova mapping tables
     ├── code-examples.md                  # Before/after code patterns
-    └── chat-completions-patterns.md      # Chat Completions, Responses API + Assistants API specifics
+    ├── chat-completions-patterns.md      # Chat Completions, Responses API + Assistants API specifics
+    └── openai-on-bedrock-patterns.md     # OpenAI models hosted on Bedrock (GPT-5.5/5.4, gpt-oss) → Nova
 ```
 
 ## What the skill handles
@@ -116,6 +122,22 @@ Rewrite this GPT-4o multimodal prompt (image input) for Nova 2 Lite.
 ```
 Migrate this OpenAI Assistants API app (code interpreter) to Nova 2 Lite.
 ```
+
+```
+We're running a bake-off on Bedrock. Migrate our GPT-5.5 (Responses API) app to Nova 2 Lite.
+```
+
+```
+Switch this Bedrock gpt-oss-120b Converse call over to Nova 2 Lite.
+```
+
+## When NOT to use this skill
+
+- **Anthropic / Claude → Nova migrations** — this skill is OpenAI-specific. Use a Claude-to-Nova migration skill if one exists.
+- **Greenfield Nova prompt authoring** (no source model to convert) — use a Nova prompt-optimization skill instead.
+- **Accuracy or latency benchmarking** of Nova vs another model — this skill produces migrated code, not evaluation harnesses; use a Nova evaluation skill.
+- **Non-Python OpenAI code** — the examples and mappings target the Python `openai` SDK and `boto3`.
+- **Titan → Nova embedding migrations** — use the `titan-nova-mme-migration` skill.
 
 ## Related resources
 

@@ -1,7 +1,7 @@
 ---
 name: openai-to-nova
-description: Migrate OpenAI GPT-4o/4.1/5.x Python code and prompts to Amazon Nova 2 Lite. Use when converting OpenAI Python API code (openai SDK — Chat Completions, Responses, or Assistants API) to Nova 2 Lite (boto3 Bedrock Runtime), rewriting OpenAI prompts for Nova format, or migrating function calling, structured output, multimodal, or reasoning features from OpenAI to Nova.
-tags: [skill, migration, openai, gpt, nova, bedrock]
+description: Migrate OpenAI GPT-4o/4.1/5.x Python code and prompts to Amazon Nova 2 Lite. Use when converting OpenAI Python API code (openai SDK — Chat Completions, Responses, or Assistants API) to Nova 2 Lite (boto3 Bedrock Runtime), migrating OpenAI models hosted on Amazon Bedrock (GPT-5.5/5.4 via the Responses API, or gpt-oss) to Nova, rewriting OpenAI prompts for Nova format, or migrating function calling, structured output, multimodal, or reasoning features from OpenAI to Nova.
+tags: [skill, migration, openai, gpt, gpt-oss, nova, bedrock]
 ---
 
 # OpenAI to Nova 2 Lite Migration
@@ -10,12 +10,18 @@ tags: [skill, migration, openai, gpt, nova, bedrock]
 
 Migrate Python application code and prompts from OpenAI (GPT-4o, GPT-4.1, GPT-5.x) to Amazon Nova 2 Lite. Transforms SDK calls (`openai` → `boto3` Bedrock Runtime `converse` API) and rewrites prompts to follow Nova 2 Lite formatting and constraints.
 
-This is not a one-line model swap. Authentication, message structure, parameter nesting, and error handling all change. Every migration delivers two things: **working migrated code** and an **explanation of every change**, including any features that cannot be ported 1:1.
+Two source situations are supported:
+1. **OpenAI API** (`api.openai.com`) — the customer calls GPT models through the `openai` SDK. Auth, SDK, request structure, and error handling all change.
+2. **OpenAI on Amazon Bedrock** — the customer already runs OpenAI models on Bedrock (GPT-5.5/5.4 via the Responses API, or gpt-oss via Converse/Responses/Chat Completions) and wants to swap the model to Nova, often as part of a multi-model bake-off. Auth/Region/billing are already AWS-native, so this is usually lower-effort. See `references/openai-on-bedrock-patterns.md`.
+
+This is not a one-line model swap (except the trivial gpt-oss-on-Converse case). Every migration delivers two things: **working migrated code** and an **explanation of every change**, including any features that cannot be ported 1:1.
 
 ## Usage
 
 Use this skill when:
-- Converting OpenAI Python code to call Nova 2 Lite via Bedrock
+- Converting OpenAI Python code (via `api.openai.com`) to call Nova 2 Lite via Bedrock
+- Migrating OpenAI models hosted on Amazon Bedrock (GPT-5.5, GPT-5.4, gpt-oss) to Nova 2 Lite
+- Swapping models in a multi-model Bedrock bake-off from an OpenAI model to Nova
 - Rewriting prompts originally written for OpenAI to Nova 2 Lite format
 - Migrating function calling / tool use from OpenAI to Nova
 - Adapting multimodal OpenAI code (images) to Nova 2 Lite (images, video)
@@ -52,9 +58,13 @@ You **MUST** follow these steps in order. After each step, confirm findings with
 
 ### Step 1: Analyze the OpenAI Code
 
-First, identify the OpenAI SDK and API style:
+**First, identify WHERE the model runs — this determines how much changes:**
+- [ ] **OpenAI API** (`api.openai.com`) — plain `OpenAI(api_key=...)` with no Bedrock base URL. Auth, SDK, and request structure all change. Continue with this workflow.
+- [ ] **OpenAI on Amazon Bedrock** — an `openai` client pointed at a `bedrock-mantle` base URL, the `BedrockOpenAI` client, or `boto3` `converse`/`invoke_model` with an `openai.*` model ID. Auth/Region are already AWS-native. **You MUST read `references/openai-on-bedrock-patterns.md`** — it identifies the two model classes (GPT-5.5/5.4 Responses-only vs gpt-oss multi-API) and their migration paths, then routes back here for the shared steps (prompt formatting, reasoning, tools).
+
+Then identify the SDK and API style:
 - [ ] Chat Completions API — `client.chat.completions.create(...)` (most common)
-- [ ] Responses API — `client.responses.create(...)` (newer; `input=` + `instructions=`)
+- [ ] Responses API — `client.responses.create(...)` (newer; `input=` + `instructions=`, or `developer`/`user` roles on Bedrock)
 - [ ] Assistants API — `client.beta.assistants.create(...)` / `client.beta.threads.*` (stateful, built-in tools)
 
 Then identify which features are used:
@@ -70,7 +80,7 @@ Then identify which features are used:
 
 You **MUST** flag any features in the "cannot migrate" list above and inform the user of alternatives before proceeding.
 
-If the source model is a high-capability reasoning model (`gpt-5.2`, `o3`, `o1`) run at high `reasoning_effort`, you **MUST** ask the user whether they have evaluated Nova 2 Lite for their use case. Start every migration with Nova 2 Lite; Nova 2 Pro exists for workloads where Lite with high-effort reasoning still falls short, but the user should validate that need with benchmark data before targeting Pro.
+If the source model is a high-capability reasoning model (`gpt-5.5`, `gpt-5.4`, `gpt-5.2`, `o3`, `o1`) run at high reasoning effort, you **MUST** ask the user whether they have evaluated Nova 2 Lite for their use case. Start every migration with Nova 2 Lite; Nova 2 Pro exists for workloads where Lite with high-effort reasoning still falls short, but the user should validate that need with benchmark data before targeting Pro.
 
 ### Step 2: Classify the Use Case
 
@@ -124,6 +134,8 @@ You **MUST** read `references/feature-mapping.md` for the complete field mapping
 You **SHOULD** read `references/code-examples.md` for before/after patterns.
 
 If the source code uses the Responses API (`client.responses.create`) or the Assistants API (`client.beta.assistants.*`), you **MUST** also read `references/chat-completions-patterns.md` for the specific parameter mappings, Responses API migration, and Assistants-to-built-in-tools handling.
+
+If the source runs on OpenAI **hosted on Amazon Bedrock** (identified in Step 1), you **MUST** read `references/openai-on-bedrock-patterns.md` instead of / in addition to the above — the source SDK, endpoint, and `modelId` differ, and the gpt-oss-on-Converse case is nearly a one-line `modelId` swap.
 
 **Ask the user which region-prefixed model ID to use:**
 
